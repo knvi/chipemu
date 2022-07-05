@@ -4,6 +4,7 @@ pub struct Chip8 {
     mem: [u8; 4096],
     vx: [u8; 16],
     regs: [u8; 16],
+    stack: Vec<u16>,
     i: u16,
     pc: u16,
 }
@@ -14,6 +15,7 @@ impl Chip8 {
             mem: [0; 4096],
             vx: [0; 16],
             regs: [0; 16],
+            stack: Vec::new(),
             i: 0,
             pc: 0x200,
         };
@@ -64,14 +66,35 @@ impl Chip8 {
             0x00E0 => println!("CLS"),
             0x00EE => println!("RETURN"),
             0x0000..=0x0FFF => {
+                match nn {
+                    0xE0 => {
+                        println!("SCREEN_CLEAR");
+                        self.pc += 2;
+                    }
+
+                    0xEE => {
+                        // ret from sub
+                        let addr = self.stack.pop().unwrap();
+                        self.pc = addr;
+                    }
+
+                    _ => panic!("invalid 0x instruction")
+                }
+
                 // 0nnn
                 let addr = nnn;
                 println!("SYS {addr}");
             }
 
             0x1000..=0x1FFF => {
+               
                 // 1nnn
                 println!("JUMP {nnn}");
+                self.pc = nnn;
+            }
+
+            0x2000..=0x2FFF => {
+                self.stack.push(self.pc + 2);
                 self.pc = nnn;
             }
 
