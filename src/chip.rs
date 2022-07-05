@@ -1,7 +1,10 @@
+use rand::{self, distributions::{Range, IndependentSample}};
+
 pub struct Chip8 {
     mem: [u8; 4096],
     vx: [u8; 16],
     regs: [u8; 16],
+    i: u16,
     pc: u16,
 }
 
@@ -11,6 +14,7 @@ impl Chip8 {
             mem: [0; 4096],
             vx: [0; 16],
             regs: [0; 16],
+            i: 0,
             pc: 0x200,
         };
 
@@ -190,6 +194,62 @@ impl Chip8 {
                 let vy = self.vx[y as usize];
                 if vx != vy {
                     self.pc += 2;
+                }
+            }
+
+            0xA000..=0xAFFF => {    // Annn
+                
+                self.i = nnn;
+                self.pc += 2;
+            }
+
+            0xB000..=0xBFFF => {    //Bnnn
+                self.pc = self.vx[0] as u16 + nnn;
+            }
+
+            0xC000..=0xCFFF => {
+                let mut rng = rand::thread_rng();
+                let interval = Range::new(0, 255);
+                let num = interval.ind_sample(&mut rng);
+                self.vx[x as usize] = num;
+                
+                self.pc += 2;
+            }
+
+            0xF000..=0xFFFF => {
+                match nn {
+                    0x1E => {
+                        let vx = self.vx[x as usize];
+                        self.i += vx as u16;
+                        self.pc +=2;
+                    }
+
+                    0x33 => {
+                        let vx = self.vx[x as usize];
+                        self.mem[self.i as usize] = vx / 100;
+                        self.mem[self.i as usize + 1] = (vx % 100) / 10;
+                        self.mem[self.i as usize + 2] = vx % 10;
+                        self.pc += 2;
+                    }
+
+                    0x55 => {
+                        for index in 0..x + 1 {
+                            let v = self.vx[index as usize];
+                            self.mem[self.i as usize + index as usize] = v;
+                        }
+                        self.i += x as u16 + 1;
+                        self.pc +=2;
+                    }
+
+                    0x65 => {
+                        for index in 0..x + 1 {
+                            let v = self.mem[self.i as usize + index as usize];
+                            self.vx[index as usize] = v;
+                        }
+                        self.i += x as u16 + 1;
+                        self.pc +=2;
+                    }
+                    _ => panic!("not implemented Fx soething")
                 }
             }
 
