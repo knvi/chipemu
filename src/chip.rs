@@ -1,12 +1,18 @@
+use minifb::Key;
 use rand::{self, distributions::{Range, IndependentSample}};
+use crate::display::Display;
+use crate::keyboard::Keyboard;
+use crate::timer::Timer;
 
 pub struct Chip8 {
     mem: [u8; 4096],
     vx: [u8; 16],
-    regs: [u8; 16],
     stack: Vec<u16>,
     i: u16,
     pc: u16,
+    screen: Display,
+    keyboard: Keyboard,
+    timer: Timer
 }
 
 impl Chip8 {
@@ -14,10 +20,12 @@ impl Chip8 {
         let mut res = Chip8 {
             mem: [0; 4096],
             vx: [0; 16],
-            regs: [0; 16],
             stack: Vec::new(),
             i: 0,
             pc: 0x200,
+            screen: Display::new(),
+            keyboard: Keyboard::new(),
+            timer: Timer::new()
         };
 
         res.mem[0..16 * 5].copy_from_slice(&[
@@ -42,17 +50,35 @@ impl Chip8 {
         res
     }
 
+    fn draw_sprite(&mut self, x: u8, y: u8, h: u8) {
+        let mut should_set_vf = false;
+        for sprite_y in 0..h {
+            let byte = self.mem[self.i as usize + sprite_y as usize];
+            if self.screen.draw_byte(byte, x, y + sprite_y) {
+                should_set_vf = true;
+            }
+        }
+        if should_set_vf {
+            self.vx[0xF] = 1;
+        } else {
+            self.vx[0xF] = 0;
+        }
+    }
+
     pub fn load_rom(&mut self, data: &Vec<u8>) {
         for i in 0..data.len() {
             self.mem[self.pc as usize + i] = data[i];
         }
     }
 
+    pub fn get_display_buffer(&self) -> &[u8] {
+        self.screen.get_dis_buf()
+    }
+
     pub fn decode(&mut self) {
         let hi = self.mem[self.pc as usize] as u16;
         let lo = self.mem[self.pc as usize + 1] as u16;
         let raw: u16 = (hi << 8) | lo;
-        println!("Instruction read {:#X}: hi{:#X} lo:{:#X} ", raw, hi, lo);
 
         // variable declaration
         let nnn = raw & 0x0FFF; // 12 bit value
@@ -60,11 +86,8 @@ impl Chip8 {
         let n = (raw & 0x00F) as u8;
         let x = ((raw & 0x0F00) >> 8) as u8;
         let y = ((raw & 0x00F0) >> 4) as u8;
-        println!("nnn={:?}, nn={:?}, n={:?} x={}, y={}", nnn, nn, n, x, y);
 
         match raw {
-            0x00E0 => println!("CLS"),
-            0x00EE => println!("RETURN"),
             0x0000..=0x0FFF => {
                 match nn {
                     0xE0 => {
@@ -102,6 +125,8 @@ impl Chip8 {
                 // 3xkk
                 let vx = self.vx[x as usize];
                 if vx == nn {
+                    self.pc += 4;
+                } else {
                     self.pc += 2;
                 }
             }
@@ -110,6 +135,8 @@ impl Chip8 {
                 // 4xkk
                 let vx = self.vx[x as usize];
                 if vx != nn {
+                    self.pc += 4;
+                } else {
                     self.pc += 2;
                 }
             }
@@ -119,6 +146,8 @@ impl Chip8 {
                 let vx = self.vx[x as usize];
                 let vy = self.vx[y as usize];
                 if vx == vy {
+                    self.pc += 4;
+                } else {
                     self.pc += 2;
                 }
             }
@@ -216,6 +245,8 @@ impl Chip8 {
                 let vx = self.vx[x as usize];
                 let vy = self.vx[y as usize];
                 if vx != vy {
+                    self.pc += 4;
+                } else {
                     self.pc += 2;
                 }
             }
@@ -239,8 +270,66 @@ impl Chip8 {
                 self.pc += 2;
             }
 
+            0xD000..=0xDFFF => {
+                let vx = self.vx[x as usize];
+                let vy = self.vx[y as usize];
+                self.draw_sprite(vx, vy, n);
+                self.pc += 2;
+            }
+
+            0xE000..=0xEFFF => {
+                match nn {
+                    0xA1 => {
+                        let key = self.vx[x as usize];
+                        if !self.keyboard.is_key_pressed(key) {
+                            self.pc += 4;
+                        } else {
+                            self.pc += 2;
+                        }
+                    }
+
+                    0x9E => {
+                        let key = self.vx[x as usize];
+                        if self.keyboard.is_key_pressed(key) {
+                            self.pc += 4;
+                        } else {
+                            self.pc += 2;
+                        }
+                    }
+
+                    _ => {
+                        panic!("Invalid 0xE exception!");
+                    }
+                }
+            }
+
             0xF000..=0xFFFF => {
                 match nn {
+                    0x07 => {
+                        self.vx[x as usize] = self.timer.get_timer();
+                        self.pc += 2;
+                    }
+                    0x0A => {
+                        if let val = self.keyboard.get_key_pressed() {
+                            self.vx[x as usize] = val;
+                            self.pc += 2 ;
+                        }
+                    }
+
+                    0x15 => {
+                        self.timer.set_timer(self.vx[x as usize]);
+                        self.pc += 2;
+                    }
+
+                    0x18 => {
+                        self.pc += 2; // i dont have sound yet and i dont think i will implement it
+                    }
+
+                    0x29 => {
+                        self.i = self.vx[x as usize] as u16 * 5;
+                        self.pc += 2;
+                    }
+
                     0x1E => {
                         let vx = self.vx[x as usize];
                         self.i += vx as u16;
@@ -278,5 +367,9 @@ impl Chip8 {
 
             _ => todo!(), // unimplemented soft
         };
+    }
+
+    pub fn set_key_pressed(&mut self, key: u8 ) {
+        self.keyboard.set_key_pressed(key);
     }
 }
