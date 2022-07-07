@@ -80,7 +80,7 @@ fn main() {
 
             for y in 0..height {
                 let yc = y / 10;
-                let off = yc * width;
+                let off = y * width;
                 for x in 0..width {
                     let ind = Display::get_ind_from_pos(x / 10, yc);
                     let pixel = display[ind];
