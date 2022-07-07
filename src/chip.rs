@@ -91,7 +91,7 @@ impl Chip8 {
             0x0000..=0x0FFF => {
                 match nn {
                     0xE0 => {
-                        println!("SCREEN_CLEAR");
+                        self.screen.clear();
                         self.pc += 2;
                     }
 
@@ -103,10 +103,6 @@ impl Chip8 {
 
                     _ => panic!("invalid 0x instruction")
                 }
-
-                // 0nnn
-                let addr = nnn;
-                println!("SYS {addr}");
             }
 
             0x1000..=0x1FFF => {
@@ -160,7 +156,7 @@ impl Chip8 {
 
             0x7000..=0x7FFF => {
                 //7xkk
-                self.vx[x as usize] += nn;
+                self.vx[x as usize] = self.vx[x as usize].wrapping_add(nn);
                 self.pc +=2;
             }
 
@@ -372,4 +368,6 @@ impl Chip8 {
     pub fn set_key_pressed(&mut self, key: u8 ) {
         self.keyboard.set_key_pressed(key);
     }
+
+
 }

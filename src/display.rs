@@ -41,4 +41,10 @@ impl Display {
     pub fn get_dis_buf(&self) -> &[u8] {
         &self.buf
     }
+
+    pub fn clear(&mut self) {
+        for pixel in self.buf.iter_mut() {
+            *pixel = 0;
+        }
+    }
 }
